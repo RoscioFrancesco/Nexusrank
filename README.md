@@ -8,8 +8,6 @@ saved items, and profile history. Queries are ranked with BM25 plus
 query-conditioned Personalized PageRank, then displayed as a network and as a
 3D relevance surface.
 
-![stack](https://img.shields.io/badge/stack-FastAPI%20%C2%B7%20SQLite%20%C2%B7%20SciPy%20%C2%B7%20React%20%C2%B7%20Three.js%20%C2%B7%20Sigma.js-4c8dff)
-
 ![NexusRank demo network](docs/screenshots/foto1.png)
 
 ## Why This Exists
