@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { layoutPositions } from './layout'
@@ -7,6 +7,8 @@ import { HIGHLIGHT, SEED_RING, TYPE_COLOR } from './theme'
 
 const QUERY_COLOR = 0xffd166
 const CAM0 = new THREE.Vector3(1.7, -2.05, 1.55)
+const CAM_TOP = new THREE.Vector3(0.02, -0.02, 3.1)
+const CAM_CLOSE = new THREE.Vector3(0.9, -1.05, 0.82)
 
 /** Terrain colour ramp: low = deep blue, high = warm. */
 function ramp(t) {
@@ -23,6 +25,8 @@ export default function SurfaceView({ data, selected, onSelectNode }) {
   const tip = useRef(null)
   const qlabel = useRef(null)
   const api = useRef(null)
+  const [dragMode, setDragMode] = useState('rotate')
+  const [autoMove, setAutoMove] = useState(false)
 
   // Recomputed only when the query, the seed set or the result scores change.
   const surface = useMemo(() => {
@@ -77,6 +81,13 @@ export default function SurfaceView({ data, selected, onSelectNode }) {
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.dampingFactor = 0.09
+    controls.enablePan = true
+    controls.minDistance = 0.45
+    controls.maxDistance = 4.2
+    controls.rotateSpeed = 0.65
+    controls.panSpeed = 0.8
+    controls.zoomSpeed = 0.8
+    controls.autoRotateSpeed = 0.75
     controls.target.set(0, 0, 0.18)
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.55))
@@ -112,6 +123,18 @@ export default function SurfaceView({ data, selected, onSelectNode }) {
       new THREE.LineBasicMaterial({ color: 0x9fb4d0, transparent: true, opacity: 0.07 })
     )
     scene.add(mesh)
+
+    const gridLines = []
+    for (let v = -1; v <= 1.001; v += 0.5) {
+      gridLines.push(new THREE.Vector3(-1, v, 0.006), new THREE.Vector3(1, v, 0.006))
+      gridLines.push(new THREE.Vector3(v, -1, 0.006), new THREE.Vector3(v, 1, 0.006))
+    }
+    scene.add(
+      new THREE.LineSegments(
+        new THREE.BufferGeometry().setFromPoints(gridLines),
+        new THREE.LineBasicMaterial({ color: 0x5d6b82, transparent: true, opacity: 0.18 })
+      )
+    )
 
     // ---- markers ---------------------------------------------------------
     const zOf = (x, y) => surface.height(x, y) + 0.035
@@ -214,8 +237,22 @@ export default function SurfaceView({ data, selected, onSelectNode }) {
     const onClick = () => {
       if (hovered) onSelectNode?.(hovered.userData.id)
     }
+    const focusMarker = (id) => {
+      const p = nodePos.get(id)
+      if (!p) return
+      controls.target.copy(p)
+      camera.position.copy(p).add(CAM_CLOSE)
+      controls.update()
+    }
+    const onDoubleClick = () => {
+      if (hovered) {
+        onSelectNode?.(hovered.userData.id)
+        focusMarker(hovered.userData.id)
+      }
+    }
     renderer.domElement.addEventListener('pointermove', onMove)
     renderer.domElement.addEventListener('click', onClick)
+    renderer.domElement.addEventListener('dblclick', onDoubleClick)
 
     const resize = () => {
       const w = host.clientWidth
@@ -248,9 +285,28 @@ export default function SurfaceView({ data, selected, onSelectNode }) {
       reset() {
         camera.position.copy(CAM0)
         controls.target.set(0, 0, 0.18)
+        camera.zoom = 1
+        camera.updateProjectionMatrix()
         controls.update()
       },
+      view(kind) {
+        const pos = kind === 'top' ? CAM_TOP : kind === 'close' ? CAM_CLOSE : CAM0
+        camera.position.copy(pos)
+        controls.target.set(0, 0, kind === 'top' ? 0 : 0.18)
+        controls.update()
+      },
+      focus(id) {
+        focusMarker(id ?? surface.sources.find((s) => s.rank === 1)?.id)
+      },
+      interaction(mode) {
+        controls.mouseButtons.LEFT = mode === 'pan' ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE
+        controls.touches.ONE = mode === 'pan' ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE
+      },
+      auto(on) {
+        controls.autoRotate = on
+      },
       highlight(id) {
+        renderer.domElement.style.cursor = 'grab'
         for (const m of pickable) {
           const on = m.userData.id === id
           m.material.color.setHex(on ? Number(`0x${HIGHLIGHT.slice(1)}`) : m.userData.baseColor)
@@ -264,6 +320,7 @@ export default function SurfaceView({ data, selected, onSelectNode }) {
       ro.disconnect()
       renderer.domElement.removeEventListener('pointermove', onMove)
       renderer.domElement.removeEventListener('click', onClick)
+      renderer.domElement.removeEventListener('dblclick', onDoubleClick)
       controls.dispose()
       scene.traverse((o) => {
         o.geometry?.dispose()
@@ -279,6 +336,14 @@ export default function SurfaceView({ data, selected, onSelectNode }) {
     api.current?.highlight(selected?.id ?? null)
   }, [selected, surface])
 
+  useEffect(() => {
+    api.current?.interaction(dragMode)
+  }, [dragMode, surface])
+
+  useEffect(() => {
+    api.current?.auto(autoMove)
+  }, [autoMove, surface])
+
   if (!surface) return <div className="graph-canvas surface-empty">no surface yet</div>
 
   return (
@@ -291,6 +356,24 @@ export default function SurfaceView({ data, selected, onSelectNode }) {
       <div className="query-label" ref={qlabel}>
         QUERY: {data.query}
       </div>
+      <div className="surface-tools">
+        <div className="toolset">
+          <button onClick={() => api.current?.view('tilt')}>Tilt</button>
+          <button onClick={() => api.current?.view('top')}>Top</button>
+          <button onClick={() => api.current?.view('close')}>Close</button>
+        </div>
+        <div className="toolset">
+          <button className={dragMode === 'rotate' ? 'active' : ''} onClick={() => setDragMode('rotate')}>
+            Rotate
+          </button>
+          <button className={dragMode === 'pan' ? 'active' : ''} onClick={() => setDragMode('pan')}>
+            Pan
+          </button>
+        </div>
+        <button className={autoMove ? 'active single' : 'single'} onClick={() => setAutoMove((v) => !v)}>
+          Auto
+        </button>
+      </div>
       <div className="legend surface-legend">
         <span>
           <i style={{ background: '#8fe3c4' }} /> height = query relevance
@@ -302,15 +385,12 @@ export default function SurfaceView({ data, selected, onSelectNode }) {
           <i style={{ background: '#4c8dff' }} /> recommended people
         </span>
         <button className="reset" onClick={() => api.current?.reset()}>
-          reset view
+          Reset
         </button>
       </div>
       <div className="surface-caption">
-        <b>Query-conditioned relevance field</b>
-        <span>
-          Terrain height is derived from the existing hybrid ranking and smoothed with a
-          screened diffusion equation.
-        </span>
+        <b>{selected?.name ?? 'Surface'}</b>
+        <span>{selected?.meta ?? data.query}</span>
       </div>
     </div>
   )

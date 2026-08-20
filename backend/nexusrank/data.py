@@ -1,150 +1,333 @@
-"""Deterministic synthetic professional network.
-
-Communities are generated explicitly (dense intra-cluster KNOWS, sparse bridges)
-so that query-conditioned PPR has real structure to exploit.
-"""
+"""Deterministic demo network: Manhattan Project physicists and mathematicians."""
 from __future__ import annotations
-
-import random
 
 from .store import Edge, GraphStore, Node
 
-CLUSTERS = {
-    "ml": {
-        "label": "Machine Learning",
-        "skills": ["PyTorch", "LLMs", "Recommender Systems", "Graph Neural Networks",
-                   "Information Retrieval", "MLOps"],
-        "companies": ["Vectorly", "Northwind AI", "Latent Labs", "Helix Research"],
-        "titles": ["ML Engineer", "Research Scientist", "Applied Scientist",
-                   "Search Relevance Engineer", "Head of AI"],
+MANHATTAN_SCIENTISTS = [
+    {
+        "key": "oppenheimer", "id": "person:hist:oppenheimer",
+        "name": "J. Robert Oppenheimer", "title": "Scientific Director",
+        "org": "Los Alamos Laboratory", "school": "University of Gottingen",
+        "location": "Los Alamos",
+        "skills": ["Quantum Mechanics", "Quantum Field Theory", "Nuclear Physics"],
+        "projects": ["Manhattan Project", "Los Alamos Theoretical Program"],
+        "activity": "Theoretical Physics",
+        "notes": "Led the scientific work at Los Alamos during the Manhattan Project.",
     },
-    "infra": {
-        "label": "Platform & Infra",
-        "skills": ["Kubernetes", "Rust", "Distributed Systems", "PostgreSQL",
-                   "Observability", "Go"],
-        "companies": ["Sundial Systems", "Bitforge", "Corvus Cloud", "Meridian Data"],
-        "titles": ["Staff Engineer", "SRE", "Backend Engineer", "Platform Lead",
-                   "Principal Architect"],
+    {
+        "key": "fermi", "id": "person:hist:fermi",
+        "name": "Enrico Fermi", "title": "Nuclear Physicist",
+        "org": "University of Chicago Metallurgical Laboratory",
+        "school": "Scuola Normale Superiore", "location": "Chicago",
+        "skills": ["Reactor Physics", "Statistical Mechanics", "Nuclear Chain Reaction"],
+        "projects": ["Chicago Pile-1", "Manhattan Project"],
+        "activity": "Experimental Physics",
+        "notes": "Led the first controlled self-sustaining nuclear chain reaction.",
     },
-    "product": {
-        "label": "Product & Design",
-        "skills": ["Product Strategy", "Design Systems", "User Research",
-                   "Figma", "Growth Analytics", "Accessibility"],
-        "companies": ["Kestrel", "Bloomline", "Tandem Studio", "Orchard Labs"],
-        "titles": ["Product Manager", "Design Lead", "UX Researcher",
-                   "Group PM", "Director of Product"],
+    {
+        "key": "bohr", "id": "person:hist:bohr",
+        "name": "Niels Bohr", "title": "Quantum Theorist",
+        "org": "Los Alamos Laboratory", "school": "University of Copenhagen",
+        "location": "Los Alamos",
+        "skills": ["Quantum Mechanics", "Atomic Theory", "Nuclear Physics"],
+        "projects": ["Manhattan Project", "Copenhagen Interpretation"],
+        "activity": "Theoretical Physics",
+        "notes": "Advised Manhattan Project scientists under the name Nicholas Baker.",
     },
-    "fin": {
-        "label": "Fintech & Quant",
-        "skills": ["Risk Modeling", "Time Series", "Payments", "C++",
-                   "Market Microstructure", "Compliance"],
-        "companies": ["Ledgerline", "Quantis Capital", "Aurum Pay", "Solstice Bank"],
-        "titles": ["Quant Researcher", "Risk Analyst", "Payments Engineer",
-                   "Trading Systems Engineer", "VP Engineering"],
+    {
+        "key": "feynman", "id": "person:hist:feynman",
+        "name": "Richard Feynman", "title": "Theoretical Physicist",
+        "org": "Los Alamos Laboratory", "school": "Princeton University",
+        "location": "Los Alamos",
+        "skills": ["Quantum Electrodynamics", "Path Integrals", "Nuclear Physics"],
+        "projects": ["Manhattan Project", "Los Alamos Theoretical Program"],
+        "activity": "Theoretical Physics",
+        "notes": "Worked in the theoretical division at Los Alamos.",
     },
-    "bio": {
-        "label": "Bio & Health",
-        "skills": ["Genomics", "Clinical Trials", "Bioinformatics", "R",
-                   "Medical Imaging", "Regulatory Affairs"],
-        "companies": ["Cytoform", "Halcyon Bio", "Verdant Health", "Nucleus Dx"],
-        "titles": ["Computational Biologist", "Data Scientist", "Clinical Lead",
-                   "Imaging Scientist", "Chief Scientist"],
+    {
+        "key": "bethe", "id": "person:hist:bethe",
+        "name": "Hans Bethe", "title": "Head of Theoretical Division",
+        "org": "Los Alamos Laboratory", "school": "University of Munich",
+        "location": "Los Alamos",
+        "skills": ["Nuclear Physics", "Stellar Nucleosynthesis", "Quantum Mechanics"],
+        "projects": ["Manhattan Project", "Los Alamos Theoretical Program"],
+        "activity": "Theoretical Physics",
+        "notes": "Led the theoretical division at Los Alamos.",
     },
-}
+    {
+        "key": "teller", "id": "person:hist:teller",
+        "name": "Edward Teller", "title": "Theoretical Physicist",
+        "org": "Los Alamos Laboratory", "school": "University of Leipzig",
+        "location": "Los Alamos",
+        "skills": ["Nuclear Physics", "Molecular Physics", "Quantum Mechanics"],
+        "projects": ["Manhattan Project", "Thermonuclear Research"],
+        "activity": "Theoretical Physics",
+        "notes": "Worked on theoretical physics problems at Los Alamos.",
+    },
+    {
+        "key": "szilard", "id": "person:hist:szilard",
+        "name": "Leo Szilard", "title": "Physicist and Inventor",
+        "org": "University of Chicago Metallurgical Laboratory",
+        "school": "Technical University of Berlin", "location": "Chicago",
+        "skills": ["Nuclear Chain Reaction", "Nuclear Physics", "Scientific Policy"],
+        "projects": ["Manhattan Project", "Einstein-Szilard Letter"],
+        "activity": "Nuclear Research",
+        "notes": "Helped initiate early atomic research and worked at the Metallurgical Laboratory.",
+    },
+    {
+        "key": "lawrence", "id": "person:hist:lawrence",
+        "name": "Ernest Lawrence", "title": "Experimental Physicist",
+        "org": "Berkeley Radiation Laboratory", "school": "Yale University",
+        "location": "Berkeley",
+        "skills": ["Cyclotron Design", "Isotope Separation", "Nuclear Physics"],
+        "projects": ["Manhattan Project", "Electromagnetic Isotope Separation"],
+        "activity": "Experimental Physics",
+        "notes": "Built cyclotron programs and contributed to isotope separation.",
+    },
+    {
+        "key": "vonneumann", "id": "person:hist:vonneumann",
+        "name": "John von Neumann", "title": "Mathematician",
+        "org": "Los Alamos Laboratory", "school": "University of Budapest",
+        "location": "Los Alamos",
+        "skills": ["Mathematical Physics", "Shock Waves", "Implosion Calculations"],
+        "projects": ["Manhattan Project", "Implosion Lens Calculations"],
+        "activity": "Applied Mathematics",
+        "notes": "Applied mathematical analysis to implosion and shock wave problems.",
+    },
+    {
+        "key": "ulam", "id": "person:hist:ulam",
+        "name": "Stanislaw Ulam", "title": "Mathematician",
+        "org": "Los Alamos Laboratory", "school": "Lwow Polytechnic",
+        "location": "Los Alamos",
+        "skills": ["Applied Mathematics", "Monte Carlo Methods", "Nuclear Calculations"],
+        "projects": ["Manhattan Project", "Los Alamos Computation"],
+        "activity": "Applied Mathematics",
+        "notes": "Worked as a mathematician at Los Alamos.",
+    },
+    {
+        "key": "segre", "id": "person:hist:segre",
+        "name": "Emilio Segre", "title": "Experimental Physicist",
+        "org": "Los Alamos Laboratory", "school": "University of Rome",
+        "location": "Los Alamos",
+        "skills": ["Nuclear Physics", "Radioactivity", "Plutonium Physics"],
+        "projects": ["Manhattan Project", "Plutonium Measurements"],
+        "activity": "Experimental Physics",
+        "notes": "Measured nuclear properties important to Los Alamos work.",
+    },
+    {
+        "key": "alvarez", "id": "person:hist:alvarez",
+        "name": "Luis Alvarez", "title": "Experimental Physicist",
+        "org": "Los Alamos Laboratory", "school": "University of Chicago",
+        "location": "Los Alamos",
+        "skills": ["Experimental Physics", "Detonators", "Nuclear Measurements"],
+        "projects": ["Manhattan Project", "Implosion Diagnostics"],
+        "activity": "Experimental Physics",
+        "notes": "Worked on detonators and diagnostics for the implosion program.",
+    },
+    {
+        "key": "wu", "id": "person:hist:wu",
+        "name": "Chien-Shiung Wu", "title": "Experimental Physicist",
+        "org": "Columbia University", "school": "University of California Berkeley",
+        "location": "New York",
+        "skills": ["Experimental Physics", "Beta Decay", "Uranium Enrichment"],
+        "projects": ["Manhattan Project", "Gaseous Diffusion"],
+        "activity": "Experimental Physics",
+        "notes": "Worked on radiation detection and uranium enrichment problems.",
+    },
+    {
+        "key": "goeppertmayer", "id": "person:hist:goeppert-mayer",
+        "name": "Maria Goeppert Mayer", "title": "Theoretical Physicist",
+        "org": "Columbia University", "school": "University of Gottingen",
+        "location": "New York",
+        "skills": ["Nuclear Physics", "Statistical Mechanics", "Isotope Separation"],
+        "projects": ["Manhattan Project", "Uranium Isotope Separation"],
+        "activity": "Theoretical Physics",
+        "notes": "Worked on isotope separation research during the Manhattan Project.",
+    },
+    {
+        "key": "woods", "id": "person:hist:woods",
+        "name": "Leona Woods", "title": "Experimental Physicist",
+        "org": "University of Chicago Metallurgical Laboratory",
+        "school": "University of Chicago", "location": "Chicago",
+        "skills": ["Reactor Physics", "Neutron Detection", "Nuclear Chain Reaction"],
+        "projects": ["Chicago Pile-1", "Manhattan Project"],
+        "activity": "Experimental Physics",
+        "notes": "Worked on Chicago Pile-1 instrumentation and reactor physics.",
+    },
+    {
+        "key": "serber", "id": "person:hist:serber",
+        "name": "Robert Serber", "title": "Theoretical Physicist",
+        "org": "Los Alamos Laboratory", "school": "University of Wisconsin",
+        "location": "Los Alamos",
+        "skills": ["Theoretical Physics", "Nuclear Physics", "Bomb Design"],
+        "projects": ["Manhattan Project", "Los Alamos Primer"],
+        "activity": "Theoretical Physics",
+        "notes": "Prepared the Los Alamos Primer for incoming scientists.",
+    },
+    {
+        "key": "weisskopf", "id": "person:hist:weisskopf",
+        "name": "Victor Weisskopf", "title": "Theoretical Physicist",
+        "org": "Los Alamos Laboratory", "school": "University of Gottingen",
+        "location": "Los Alamos",
+        "skills": ["Quantum Field Theory", "Nuclear Physics", "Theoretical Physics"],
+        "projects": ["Manhattan Project", "Los Alamos Theoretical Program"],
+        "activity": "Theoretical Physics",
+        "notes": "Worked in the Los Alamos theoretical division.",
+    },
+    {
+        "key": "frisch", "id": "person:hist:frisch",
+        "name": "Otto Frisch", "title": "Physicist",
+        "org": "Los Alamos Laboratory", "school": "University of Vienna",
+        "location": "Los Alamos",
+        "skills": ["Nuclear Fission", "Experimental Physics", "Critical Mass"],
+        "projects": ["Manhattan Project", "British Mission"],
+        "activity": "Experimental Physics",
+        "notes": "Joined the British Mission and worked at Los Alamos.",
+    },
+    {
+        "key": "peierls", "id": "person:hist:peierls",
+        "name": "Rudolf Peierls", "title": "Theoretical Physicist",
+        "org": "Los Alamos Laboratory", "school": "University of Leipzig",
+        "location": "Los Alamos",
+        "skills": ["Theoretical Physics", "Critical Mass", "Nuclear Fission"],
+        "projects": ["Manhattan Project", "British Mission"],
+        "activity": "Theoretical Physics",
+        "notes": "Joined the British Mission and contributed theoretical calculations.",
+    },
+    {
+        "key": "chadwick", "id": "person:hist:chadwick",
+        "name": "James Chadwick", "title": "Physicist",
+        "org": "British Mission", "school": "University of Manchester",
+        "location": "Los Alamos",
+        "skills": ["Neutron Physics", "Nuclear Physics", "Scientific Coordination"],
+        "projects": ["Manhattan Project", "British Mission"],
+        "activity": "Experimental Physics",
+        "notes": "Led the British Mission scientific contribution to the Manhattan Project.",
+    },
+    {
+        "key": "wheeler", "id": "person:hist:wheeler",
+        "name": "John Archibald Wheeler", "title": "Theoretical Physicist",
+        "org": "University of Chicago Metallurgical Laboratory",
+        "school": "Johns Hopkins University", "location": "Chicago",
+        "skills": ["Nuclear Physics", "Reactor Physics", "Quantum Theory"],
+        "projects": ["Manhattan Project", "Nuclear Reactor Research"],
+        "activity": "Theoretical Physics",
+        "notes": "Worked on reactor and nuclear physics problems during the project.",
+    },
+    {
+        "key": "neddermeyer", "id": "person:hist:neddermeyer",
+        "name": "Seth Neddermeyer", "title": "Experimental Physicist",
+        "org": "Los Alamos Laboratory", "school": "California Institute of Technology",
+        "location": "Los Alamos",
+        "skills": ["Implosion Design", "Cosmic Rays", "Experimental Physics"],
+        "projects": ["Manhattan Project", "Implosion Program"],
+        "activity": "Experimental Physics",
+        "notes": "Proposed and developed early implosion concepts at Los Alamos.",
+    },
+]
 
-SCHOOLS = ["Bellhaven University", "Kingsmere Institute of Technology", "Ravenwood College",
-           "Aldermere Polytechnic", "Saint Ivo University", "Tessellate School of Design"]
-
-FIRST = ["Ada", "Rafael", "Mei", "Jonas", "Priya", "Tomas", "Nadia", "Ivan", "Sofia", "Kwame",
-         "Lena", "Hugo", "Amara", "Dmitri", "Yara", "Oscar", "Ines", "Kenji", "Zoe", "Malik",
-         "Freya", "Bruno", "Anika", "Luca", "Noor", "Elias", "Chiara", "Ravi", "Greta", "Samir"]
-LAST = ["Okafor", "Lindqvist", "Moreau", "Tanaka", "Ferreira", "Vasquez", "Novak", "Haddad",
-        "Bergström", "Ionescu", "Kowalski", "Rossi", "Delgado", "Nakamura", "Petrov",
-        "Abadi", "Sørensen", "Marchetti", "Dubois", "Ashworth"]
-CITIES = ["Milan", "Berlin", "London", "Lisbon", "Amsterdam", "Zurich", "Austin",
-          "Toronto", "Singapore", "New York"]
-
-POST_TEMPLATES = [
-    "Why {s} is quietly reshaping how we build {s2} systems",
-    "Notes from six months of {s} in production",
-    "Hiring: we need someone who lives and breathes {s}",
-    "A short field guide to {s} for {s2} teams",
-    "What I got wrong about {s}",
+MANHATTAN_KNOWS = [
+    ("oppenheimer", "fermi"), ("oppenheimer", "bohr"), ("oppenheimer", "feynman"),
+    ("oppenheimer", "bethe"), ("oppenheimer", "teller"), ("oppenheimer", "vonneumann"),
+    ("oppenheimer", "ulam"), ("oppenheimer", "serber"), ("oppenheimer", "weisskopf"),
+    ("oppenheimer", "segre"), ("oppenheimer", "alvarez"), ("oppenheimer", "neddermeyer"),
+    ("fermi", "szilard"), ("fermi", "woods"), ("fermi", "wheeler"),
+    ("fermi", "lawrence"), ("fermi", "bohr"), ("bethe", "feynman"),
+    ("bethe", "teller"), ("bethe", "weisskopf"), ("szilard", "wheeler"),
+    ("lawrence", "alvarez"), ("lawrence", "segre"), ("vonneumann", "ulam"),
+    ("vonneumann", "neddermeyer"), ("wu", "goeppertmayer"),
+    ("frisch", "peierls"), ("frisch", "chadwick"), ("peierls", "chadwick"),
+    ("bohr", "chadwick"), ("serber", "feynman"),
 ]
 
 
 def generate(store: GraphStore, n_people: int = 180, seed: int = 7) -> None:
-    rng = random.Random(seed)
+    """Compatibility entrypoint; demo size/seed are intentionally ignored."""
+    ensure_manhattan_demo(store, reset=True)
+
+
+def ensure_manhattan_demo(store: GraphStore, reset: bool = False) -> None:
+    """Keep demo data limited to Manhattan Project physicists/mathematicians."""
+    conn = getattr(store, "conn", None)
+    allowed = [p["id"] for p in MANHATTAN_SCIENTISTS]
+    if conn is not None and not reset:
+        placeholders = ",".join("?" for _ in allowed)
+        bad = conn.execute(
+            f"SELECT COUNT(*) FROM nodes WHERE dataset='demo' AND type='person' "
+            f"AND id NOT IN ({placeholders})",
+            allowed,
+        ).fetchone()[0]
+        have = conn.execute(
+            f"SELECT COUNT(*) FROM nodes WHERE dataset='demo' AND type='person' "
+            f"AND id IN ({placeholders})",
+            allowed,
+        ).fetchone()[0]
+        reset = bool(bad) or have != len(allowed)
+
+    if reset:
+        _clear_demo(store)
+    _write_manhattan_demo(store)
+
+
+def ensure_historical_demo(store: GraphStore) -> None:
+    ensure_manhattan_demo(store)
+
+
+def _write_manhattan_demo(store: GraphStore) -> None:
     nodes: list[Node] = []
     edges: list[Edge] = []
+    seen_nodes: set[str] = set()
 
-    for name in SCHOOLS:
-        nodes.append(Node(f"school:{_slug(name)}", "school", name, "university school"))
+    def node(nid: str, ntype: str, name: str, text: str = "", meta: str = "") -> None:
+        if nid not in seen_nodes:
+            seen_nodes.add(nid)
+            nodes.append(Node(nid, ntype, name, text or name, meta))
 
-    skill_of: dict[str, str] = {}
-    for key, c in CLUSTERS.items():
-        for s in c["skills"]:
-            sid = f"skill:{_slug(s)}"
-            skill_of[s] = sid
-            nodes.append(Node(sid, "skill", s, f"{s} {c['label']}", c["label"]))
-        for comp in c["companies"]:
-            cid = f"company:{_slug(comp)}"
-            nodes.append(Node(cid, "company", comp, f"{comp} {c['label']} company",
-                              c["label"]))
-            for s in rng.sample(c["skills"], 3):
-                edges.append(Edge(cid, skill_of[s], "REQUIRES"))
+    for p in MANHATTAN_SCIENTISTS:
+        headline = f"{p['title']} at {p['org']}"
+        text = " ".join([
+            p["name"], headline, p["location"], p["school"], p["activity"],
+            " ".join(p["skills"]), " ".join(p["projects"]), p["notes"],
+        ])
+        node(p["id"], "person", p["name"], text, f"{headline} · {p['location']}")
 
-    members: dict[str, list[str]] = {k: [] for k in CLUSTERS}
-    keys = list(CLUSTERS)
-    for i in range(n_people):
-        key = keys[i % len(keys)]
-        c = CLUSTERS[key]
-        pid = f"person:{i:04d}"
-        name = f"{rng.choice(FIRST)} {rng.choice(LAST)}"
-        title = rng.choice(c["titles"])
-        company = rng.choice(c["companies"])
-        city = rng.choice(CITIES)
-        skills = rng.sample(c["skills"], 3)
-        # 30% of people bridge into a second domain -> interesting cross-cluster paths
-        if rng.random() < 0.30:
-            other = CLUSTERS[rng.choice([k for k in keys if k != key])]
-            skills.append(rng.choice(other["skills"]))
-        headline = f"{title} at {company}"
-        nodes.append(Node(
-            pid, "person", name,
-            f"{headline} {city} {' '.join(skills)} {c['label']}",
-            f"{headline} · {city}",
-        ))
-        members[key].append(pid)
-        edges.append(Edge(pid, f"company:{_slug(company)}", "WORKED_AT"))
-        edges.append(Edge(pid, f"school:{_slug(rng.choice(SCHOOLS))}", "STUDIED_AT"))
-        for s in skills:
-            edges.append(Edge(pid, skill_of[s], "HAS_SKILL", 0.9 if s in c["skills"] else 0.5))
+        org_id = f"company:{_slug(p['org'])}"
+        school_id = f"school:{_slug(p['school'])}"
+        activity_id = f"activity:{_slug(p['activity'])}"
+        node(org_id, "company", p["org"], f"{p['org']} Manhattan Project institution",
+             "Manhattan Project")
+        node(school_id, "school", p["school"], f"{p['school']} university", "school")
+        node(activity_id, "activity", p["activity"], p["activity"], "activity")
+        edges += [
+            Edge(p["id"], org_id, "WORKED_AT", 1.0),
+            Edge(p["id"], school_id, "STUDIED_AT", 0.8),
+            Edge(p["id"], activity_id, "MEMBER_OF", 0.7),
+        ]
 
-        if rng.random() < 0.55:
-            s, s2 = rng.sample(skills, 2) if len(skills) > 1 else (skills[0], skills[0])
-            post_id = f"post:{i:04d}"
-            body = rng.choice(POST_TEMPLATES).format(s=s, s2=s2)
-            nodes.append(Node(post_id, "post", body, f"{body} {s} {s2}", f"post by {name}"))
-            edges.append(Edge(pid, post_id, "AUTHORED"))
-            edges.append(Edge(post_id, skill_of[s], "MENTIONS"))
+        for skill in p["skills"]:
+            sid = f"skill:{_slug(skill)}"
+            node(sid, "skill", skill, f"{skill} Manhattan Project physics", "science")
+            edges.append(Edge(p["id"], sid, "HAS_SKILL", 0.95))
+        for project in p["projects"]:
+            pid = f"project:{_slug(project)}"
+            node(pid, "project", project, f"{project} Manhattan Project", "project")
+            edges.append(Edge(p["id"], pid, "WORKED_ON", 0.9))
 
-    # small-world KNOWS: ring lattice + random intra-cluster chords + rare bridges
-    for key, group in members.items():
-        n = len(group)
-        for i, pid in enumerate(group):
-            for off in (1, 2):
-                edges.append(Edge(pid, group[(i + off) % n], "KNOWS", 1.0))
-            for _ in range(rng.randint(1, 4)):
-                other = rng.choice(group)
-                if other != pid:
-                    edges.append(Edge(pid, other, "KNOWS", 0.9))
-    all_people = [p for g in members.values() for p in g]
-    for _ in range(int(0.35 * len(all_people))):
-        a, b = rng.sample(all_people, 2)
-        edges.append(Edge(a, b, "KNOWS", 0.6))
+    ids = {p["key"]: p["id"] for p in MANHATTAN_SCIENTISTS}
+    for a, b in MANHATTAN_KNOWS:
+        if a in ids and b in ids:
+            edges.append(Edge(ids[a], ids[b], "KNOWS", 0.85))
 
-    store.write(nodes, _dedupe(edges))
+    store.write(nodes, _dedupe(edges), dataset="demo")
+
+
+def _clear_demo(store: GraphStore) -> None:
+    conn = getattr(store, "conn", None)
+    if conn is None:
+        return
+    with conn:
+        conn.execute("DELETE FROM edges WHERE dataset='demo'")
+        conn.execute("DELETE FROM nodes WHERE dataset='demo'")
 
 
 def _dedupe(edges: list[Edge]) -> list[Edge]:

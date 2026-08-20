@@ -1,20 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import GraphView from './GraphView'
+import ProfileEditor from './ProfileEditor'
 import SurfaceView from './SurfaceView'
-import { fetchGraph, fetchHealth, fetchViewers } from './api'
+import { clearMyNetwork, fetchGraph, fetchHealth, fetchState, fetchSuggestions, fetchViewers, importLinkedIn, searchPeople, setDataset } from './api'
 import { TYPE_COLOR } from './theme'
 
-const EXAMPLES = [
-  'graph neural networks recommender systems',
-  'kubernetes rust distributed systems',
-  'design systems user research',
-  'payments risk modeling',
-  'genomics bioinformatics',
-]
+const DEFAULT_QUERY = 'network'
 
 export default function App() {
-  const [query, setQuery] = useState(EXAMPLES[0])
-  const [submitted, setSubmitted] = useState(EXAMPLES[0])
+  const [query, setQuery] = useState(DEFAULT_QUERY)
+  const [submitted, setSubmitted] = useState(DEFAULT_QUERY)
   const [viewer, setViewer] = useState('')
   const [viewers, setViewers] = useState([])
   const [health, setHealth] = useState(null)
@@ -23,10 +18,27 @@ export default function App() {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
   const [view, setView] = useState('network')
+  const [editing, setEditing] = useState(undefined) // undefined = closed, null = add
+  const [reload, setReload] = useState(0)
+  const [dataset, setDatasetName] = useState('demo')
+  const [examples, setExamples] = useState([])
+  const [personQuery, setPersonQuery] = useState('')
+  const [peopleMatches, setPeopleMatches] = useState([])
 
   useEffect(() => {
     fetchViewers().then((r) => setViewers(r.viewers)).catch(() => {})
-    fetchHealth().then(setHealth).catch(() => {})
+    fetchHealth().then((h) => {
+      setHealth(h)
+      if (h.active_dataset) setDatasetName(h.active_dataset)
+    }).catch(() => {})
+    fetchState().then((s) => setDatasetName(s.active_dataset)).catch(() => {})
+    fetchSuggestions().then((r) => {
+      setExamples(r.suggestions ?? [])
+      if (r.suggestions?.[0]) {
+        setQuery(r.suggestions[0])
+        setSubmitted(r.suggestions[0])
+      }
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -44,11 +56,90 @@ export default function App() {
     return () => {
       live = false
     }
-  }, [submitted, viewer])
+  }, [submitted, viewer, reload])
+
+  useEffect(() => {
+    let live = true
+    const q = personQuery.trim()
+    if (!q) {
+      setPeopleMatches([])
+      return () => { live = false }
+    }
+    const t = setTimeout(() => {
+      searchPeople(q)
+        .then((r) => live && setPeopleMatches(r.people ?? []))
+        .catch(() => live && setPeopleMatches([]))
+    }, 160)
+    return () => {
+      live = false
+      clearTimeout(t)
+    }
+  }, [personQuery, dataset, reload])
 
   const results = data?.results ?? []
   const byId = useMemo(() => new Map(results.map((r) => [r.id, r])), [results])
   const onSelectNode = useCallback((id) => setSelected(byId.get(id) ?? null), [byId])
+  const runRank = useCallback((value = query) => {
+    const next = value.trim() || examples[0] || DEFAULT_QUERY
+    setQuery(next)
+    setSubmitted(next)
+    setReload((n) => n + 1)
+  }, [examples, query])
+
+  const refresh = async ({ focusFirstSuggestion = false } = {}) => {
+    setReload((n) => n + 1)
+    fetchViewers().then((r) => setViewers(r.viewers)).catch(() => {})
+    fetchHealth().then(setHealth).catch(() => {})
+    fetchSuggestions().then((r) => {
+      const next = r.suggestions ?? []
+      setExamples(next)
+      if (focusFirstSuggestion && next[0]) {
+        setQuery(next[0])
+        setSubmitted(next[0])
+      }
+    }).catch(() => {})
+  }
+
+  const onImport = async (fileList) => {
+    const files = Array.from(fileList ?? [])
+    if (!files.length) return
+    setError(null)
+    try {
+      const payload = files.length === 1
+        ? { content: await files[0].text() }
+        : { files: await Promise.all(files.map(async (f) => ({
+            name: f.webkitRelativePath || f.name,
+            content: await f.text(),
+          }))) }
+      await importLinkedIn(payload)
+      setDatasetName('my')
+      setViewer('')
+      await refresh({ focusFirstSuggestion: true })
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  const switchDataset = async (next) => {
+    setDatasetName(next)
+    try {
+      await setDataset(next)
+      await refresh()
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  const clearNetwork = async () => {
+    if (!confirm('Clear My Network? This deletes imported contacts, manual people, enrichment, and generated relations. Demo data stays separate.')) return
+    try {
+      await clearMyNetwork()
+      setDatasetName('demo')
+      await refresh()
+    } catch (e) {
+      setError(e.message)
+    }
+  }
 
   return (
     <div className="app">
@@ -60,7 +151,7 @@ export default function App() {
           className="searchbar"
           onSubmit={(e) => {
             e.preventDefault()
-            setSubmitted(query.trim() || EXAMPLES[0])
+            runRank()
           }}
         >
           <input
@@ -79,19 +170,51 @@ export default function App() {
           </select>
           <button type="submit">Rank</button>
         </form>
+        <button className="ghost" onClick={() => setEditing(null)}>
+          Add person
+        </button>
+        <label className="ghost import">
+          Import CSVs
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            multiple
+            onChange={(e) => {
+              onImport(e.target.files)
+              e.target.value = ''
+            }}
+          />
+        </label>
+        <label className="ghost import">
+          Import Folder
+          <input
+            type="file"
+            multiple
+            webkitdirectory=""
+            directory=""
+            onChange={(e) => {
+              onImport(e.target.files)
+              e.target.value = ''
+            }}
+          />
+        </label>
+        <select value={dataset} onChange={(e) => switchDataset(e.target.value)} aria-label="Dataset">
+          <option value="demo">Demo Network</option>
+          <option value="my">My Network</option>
+        </select>
+        <button className="ghost" onClick={clearNetwork}>Clear My Network</button>
         <div className="stats">
-          {health ? `${health.nodes} nodes · ${health.edges} edges` : '…'}
+          {health ? `${health.nodes} nodes · ${health.edges} edges · ${health.imported_network ?? 0} imported` : '…'}
         </div>
       </header>
 
       <div className="examples">
-        {EXAMPLES.map((e) => (
+        {examples.map((e) => (
           <button
             key={e}
             className={e === submitted ? 'chip active' : 'chip'}
             onClick={() => {
-              setQuery(e)
-              setSubmitted(e)
+              runRank(e)
             }}
           >
             {e}
@@ -102,6 +225,33 @@ export default function App() {
       <main>
         <aside>
           {error && <p className="error">{error}</p>}
+          <div className="people-search">
+            <input
+              value={personQuery}
+              onChange={(e) => setPersonQuery(e.target.value)}
+              placeholder="Find a person by name, company, or role…"
+              aria-label="Find people"
+            />
+            {peopleMatches.length > 0 && (
+              <ol className="people-matches">
+                {peopleMatches.map((p) => (
+                  <li key={p.id}>
+                    <button
+                      onClick={() => {
+                        runRank(p.name)
+                      }}
+                    >
+                      <b>{p.name}</b>
+                      <span>{p.meta}</span>
+                    </button>
+                    <button className="ghost small" onClick={() => setEditing(p.id)}>
+                      Edit
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
           {data?.seeds?.length > 0 && (
             <div className="seeds concepts">
               <h2>Query concepts</h2>
@@ -117,6 +267,12 @@ export default function App() {
           <h2>
             Recommended people {loading && <span className="spin">·</span>}
           </h2>
+          {!loading && results.length === 0 && (
+            <p className="empty">
+              No contacts yet. Use <b>Add person</b> to create one, then enrich it with
+              education, experience, skills, activities and projects.
+            </p>
+          )}
           <ol className="results">
             {results.map((r, i) => (
               <li
@@ -137,8 +293,19 @@ export default function App() {
                       <PathChain path={r.path} why={r.why} />
                     </div>
                   )}
+                  <button
+                    className="ghost small enrich"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setEditing(r.id)
+                    }}
+                  >
+                    Enrich profile
+                  </button>
                 </div>
-                <div className="score">{r.score.toFixed(3)}</div>
+                <div className="side">
+                  <span className="score">{r.score.toFixed(3)}</span>
+                </div>
               </li>
             ))}
           </ol>
@@ -175,6 +342,14 @@ export default function App() {
           )}
         </section>
       </main>
+
+      {editing !== undefined && (
+        <ProfileEditor
+          personId={editing}
+          onClose={() => setEditing(undefined)}
+          onSaved={refresh}
+        />
+      )}
     </div>
   )
 }

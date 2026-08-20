@@ -44,6 +44,7 @@ class SearchResponse:
 # the skill/company node for that topic sits at the centre of the people who own
 # it. Posts match lexically but are short and noisy, so they are damped.
 SEED_BOOST = {"skill": 2.6, "company": 2.2, "school": 1.8, "person": 1.0, "post": 0.7}
+HIDDEN_NODE_IDS = {"person:me"}
 
 
 def _unit(x: np.ndarray) -> np.ndarray:
@@ -56,7 +57,12 @@ class NexusRank:
 
     def __init__(self, store: GraphStore) -> None:
         self.store = store
-        self.graph = HeteroGraph(store.nodes(), store.edges())
+        raw_nodes = [n for n in store.nodes() if n.id not in HIDDEN_NODE_IDS]
+        visible = {n.id for n in raw_nodes}
+        edges = [e for e in store.edges() if e.src in visible and e.dst in visible]
+        connected = {x for e in edges for x in (e.src, e.dst)}
+        nodes = [n for n in raw_nodes if n.type == "person" or n.id in connected]
+        self.graph = HeteroGraph(nodes, edges)
         self.lex = BM25Index(self.graph.nodes)
 
     # ---- query conditioning -------------------------------------------------
@@ -89,7 +95,11 @@ class NexusRank:
         from .ppr import local_ppr, power_ppr, seed_vector
 
         g = self.graph
+        if not len(g):          # empty network (fresh install, nothing added yet)
+            return SearchResponse(query=query, seeds=[], results=[], solver=solver)
         seeds = self.seeds_for(query, viewer)
+        if not seeds:
+            return SearchResponse(query=query, seeds=[], results=[], solver=solver)
         idx_seeds = {g.index[k]: v for k, v in seeds.items() if k in g.index}
 
         if solver == "local":
@@ -109,6 +119,8 @@ class NexusRank:
 
         results: list[Result] = []
         for pos in order:
+            if fused[pos] <= 0:
+                continue
             i = int(candidates[pos])
             node = g.nodes[i]
             if node.id == viewer:       # never recommend the viewer to themself
@@ -155,11 +167,12 @@ class NexusRank:
             for hop in r.path:
                 keep.add(hop["src"])
                 keep.add(hop["dst"])
-        if viewer:
+        if viewer and viewer in g.by_id:
             keep.add(viewer)
 
         score = {r.id: r.score for r in resp.results}
         seed_ids = {s["id"] for s in resp.seeds}
+        keep = {nid for nid in keep if nid in g.by_id}
         nodes = [{"id": nid, "label": g.by_id[nid].name, "type": g.by_id[nid].type,
                   "meta": g.by_id[nid].meta, "score": score.get(nid, 0.0),
                   "seed": nid in seed_ids} for nid in keep]

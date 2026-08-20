@@ -5,3 +5,8 @@ node_modules/
 dist/
 *.db
 .pytest_cache/
+Connections.csv
+connections.csv
+data/
+.env
+*.sqlite
